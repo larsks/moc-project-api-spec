@@ -1,0 +1,484 @@
+# Based on the OpenAPI 3.0.3 specification [1]
+#
+# [1]: https://swagger.io/specification/
+
+openapi: 3.0.3
+info:
+  title: Project microservice example
+  version: 0.0.1
+  contact:
+    name: Lars Kellogg-Stedman
+    email: lars@redhat.com
+  description: |
+    # MOC project microservice
+
+    This document describes an API for managing projects across multiple
+    backends (initially OpenShift and OpenStack, but potentionally others
+    as well).
+
+    ## Api Overview
+
+    All API operations return an `ApiResponse` object. The response object
+    always contains the following fields:
+
+    - `status`: This will be `ok` if the operation is successful,
+      `error` otherwise.
+
+    - `message`: If `status` is `error`, then a message describing
+      the error. Otherwise a message indicating the success of the operation.
+
+    The response may also contain other fields depending on the request (for
+    example, the response to a `CreateProject` operation will include a
+    `project` field with the project details).
+
+
+tags:
+  - name: projects
+    description: Operations on projects
+
+  - name: roles
+    description: Operations on project roles
+
+  - name: quotas
+    description: Operations on quotas
+
+  - name: users
+    description: Operations on users
+
+########################################################################
+
+paths:
+
+  #                  _           _
+  #  _ __  _ __ ___ (_) ___  ___| |_ ___
+  # | '_ \| '__/ _ \| |/ _ \/ __| __/ __|
+  # | |_) | | | (_) | |  __/ (__| |_\__ \
+  # | .__/|_|  \___// |\___|\___|\__|___/
+  # |_|           |__/
+  /projects:
+    get:
+      tags:
+        - projects
+      operationId: ListProjects
+      summary: Return a list of project names
+      description: |
+        Return a list of names for projects that were created using this API.
+        That is, this endpoint must not expose projects that are native to
+        the backend (like the `openshift-config` namespace on OpenShift) or
+        projects created through other mechanisms.
+
+        Clients should call the GetProject endpoint to retrieve details about
+        individual projects.
+      responses:
+        '200':
+          description: List of project names
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                status: ok
+                message: Success
+                names:
+                  - project1
+                  - project2
+        'default':
+          $ref: '#/components/responses/UnexpectedErrorResponse'
+
+    post:
+      tags:
+        - projects
+      operationId: CreateProject
+      summary: Create a new project
+      description: |
+      requestBody:
+        description: Information about the project
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+            example:
+              name: project1
+              requester: alice@example.com
+              quota: medium
+              admins:
+                - alice@example.com
+                - bob@example.com
+              members:
+                - carol@example.com
+                - dave@example.com
+      responses:
+        '201':
+          description: Project was created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                status: ok
+                message: Successfully created project project1
+                project:
+                  name: project1
+                  requester: alice@example.com
+                  quota: medium
+                  admins:
+                    - alice@example.com
+                    - bob@example.com
+                  members:
+                    - carol@example.com
+                    - dave@example.com
+        '409':
+          description: Project already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                status: error
+                message: >
+                  Failed to create project project1: a project named
+                  project1 already exists.
+        'default':
+          $ref: '#/components/responses/UnexpectedErrorResponse'
+
+  /projects/{projectName}:
+    parameters:
+      - name: projectName
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - projects
+      operationId: GetProject
+      summary: Get project details
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                status: ok
+                message: Information about project project1
+                project:
+                  name: project1
+                  requester: alice@example.com
+                  quota: medium
+                  admins:
+                    - alice@example.com
+                    - bob@example.com
+                  members:
+                    - carol@example.com
+                    - dave@example.com
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ProjectNotFound'
+        'default':
+          $ref: '#/components/responses/UnexpectedErrorResponse'
+
+    delete:
+      tags:
+        - projects
+      operationId: DeleteProject
+      summary: Delete a project
+      responses:
+        '200':
+          description: Successfully deleted project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                status: ok
+                message: Deleted project project1
+                project:
+                  name: project1
+                  requester: alice@example.com
+                  quota: medium
+                  admins:
+                    - alice@example.com
+                    - bob@example.com
+                  members:
+                    - carol@example.com
+                    - dave@example.com
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ProjectNotFound'
+        'default':
+          $ref: '#/components/responses/UnexpectedErrorResponse'
+
+    patch:
+      tags:
+        - projects
+      operationId: UpdateProject
+      summary: Update a project
+      description: |
+        Modify the description, requester, or quota associated with a
+        project. This endpoint cannot be used to change project membership.
+      requestBody:
+        description: Project fields to update
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+            example:
+              quota: x-large
+      responses:
+        '200':
+          description: |
+            Successfully updated project
+
+            Response includes the updated project in the `project` field.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                status: ok
+                message: Updated project project1
+                project:
+                  name: project1
+                  requester: alice@example.com
+                  quota: x-large
+                  admins:
+                    - alice@example.com
+                    - bob@example.com
+                  members:
+                    - carol@example.com
+                    - dave@example.com
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ProjectNotFound'
+        'default':
+          $ref: '#/components/responses/UnexpectedErrorResponse'
+
+  #            _
+  #  _ __ ___ | | ___  ___
+  # | '__/ _ \| |/ _ \/ __|
+  # | | | (_) | |  __/\__ \
+  # |_|  \___/|_|\___||___/
+  #
+  /project/{projectName}/role/{roleName}/members:
+    parameters:
+      - name: projectName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: roleName
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - admins
+            - members
+    get:
+      tags:
+        - roles
+      operationId: ListRoleMembers
+      summary: Get list of members who have role in project
+    post:
+      tags:
+        - roles
+      operationId: AddRoleMember
+      summary: Add a user to role on project
+    delete:
+      tags:
+        - roles
+      operationId: RemoveAllRoleMembers
+      summary: Remove all users associated with this role
+
+  /project/{projectName}/role/{roleName}/members/{memberName}:
+    parameters:
+      - name: projectName
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: roleName
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - admins
+            - members
+      - name: memberName
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - roles
+      operationId: GetRoleMember
+      summary: Confirm member has role on project
+    delete:
+      tags:
+        - roles
+      operationId: RemoveRoleMember
+      summary: Remove member from role on project
+
+  #                    _
+  #   __ _ _   _  ___ | |_ __ _ ___
+  #  / _` | | | |/ _ \| __/ _` / __|
+  # | (_| | |_| | (_) | || (_| \__ \
+  #  \__, |\__,_|\___/ \__\__,_|___/
+  #     |_|
+  /quotas:
+    get:
+      tags:
+        - quotas
+      operationId: ListQuotas
+      summary: Get list of valid quota names
+
+
+  #  _   _ ___  ___ _ __ ___
+  # | | | / __|/ _ \ '__/ __|
+  # | |_| \__ \  __/ |  \__ \
+  #  \__,_|___/\___|_|  |___/
+  # 
+  /users:
+    get:
+      tags:
+        - users
+      operationId: ListUsers
+      summary: Get a list of users
+
+    post:
+      tags:
+        - users
+      operationId: CreateUser
+      summary: Create a new user
+      description: |
+        This operation is not required by all backends. In cases where
+        user creation is not managed by this API, this endpoint should
+        return success if the user exists and an error otherwise.
+
+  /users/{userName}:
+    parameters:
+      - name: userName
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - users
+      operationId: GetUser
+      summary: Confirm that a user exists
+
+    delete:
+      tags:
+        - users
+      operationId: DeleteUser
+      summary: Delete a user
+      description: |
+        In cases where users are not managed by this API, this endpoint
+        should remove the named user from all projects.
+
+########################################################################
+
+components:
+
+  schemas:
+    Project:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/ProjectUpdate'
+        - type: object
+          properties:
+            name:
+              type: string
+            admins:
+              type: array
+              items:
+                type: string
+            members:
+              type: array
+              items:
+                type: string
+
+    ProjectUpdate:
+      type: object
+      properties:
+        description:
+          type: string
+        quota:
+          type: string
+          enum:
+            - x-small
+            - small
+            - medium
+            - large
+            - x-large
+        requester:
+          type: string
+
+    ListOfNames:
+      type: array
+      items:
+        type: string
+
+    ApiResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - error
+        message:
+          type: string
+
+      oneOf:
+        - type: object
+          properties:
+            project:
+              $ref: '#/components/schemas/Project'
+        - type: object
+          properties:
+            names:
+              $ref: '#/components/schemas/ListOfNames'
+
+  responses:
+    UnexpectedErrorResponse:
+      description: Return in the event of an unexpected error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            status: error
+            message: An unexpected error has occurred
+
+    Forbidden:
+      description: |
+        The requested project cannot be modified or deleted
+
+        This error is returned when the API is used to modify or delete
+        a project that was not originally created through the API.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            status: error
+            message: Project project1 cannot be modified or deleted
+
+    ProjectNotFound:
+      description: The requested project does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            status: error
+            message: Project project1 does not exist
