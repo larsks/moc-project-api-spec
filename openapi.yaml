@@ -1,0 +1,386 @@
+openapi: 3.0.0
+info:
+  title: Project microservice
+  version: 0.0.1
+  description: |
+    ## MOC project microservice
+
+    This document describes an API for managing projects across multiple
+    backends (initially OpenShift and OpenStack, but potentionally others
+    as well). The API provides the caller with the follow capabilities:
+
+    - Create projects
+    - Delete projects
+    - Add users to projects
+    - Remove users from projects
+    - Set project quotas
+    - Modify project quotas
+
+    This API explicitly does **not** provide facilities for managing users
+    or groups. Backend implementations are responsible for creating users
+    if necessary when they are first added to a project. Similarly, the
+    backend is responsible for creating groups and managing group
+    memberships in response to requests made using this API.
+
+    For our backends of interest, user creation is typically handled
+    automatically by the authentication system (that is, a user is created
+    when they first authenticate to the service).
+paths:
+  /projects:
+    get:
+      summary: Return a list of project names
+      operationId: ListProjects
+      responses:
+        '200':
+          description: list of project names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        'default':
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+    post:
+      summary: Create a new project
+      operationId: CreateProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '409':
+          description: project already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        'default':
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+
+  /projects/{projectName}:
+    get:
+      summary: Return details about a project
+      operationId: GetProject
+      parameters:
+        - name: projectName
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '404':
+          description: |
+            Project does not exist, or is not accessible via this API. For
+            example, we don't want to expose namespaces like `openshift-config`
+            to management by this tool, so requests for
+            `/project/openshift-config` would return 404 even though the
+            namespace exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        'default':
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+    patch:
+      summary: Update a project
+      operationId: UpdateProject
+      parameters:
+        - name: projectName
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '404':
+          description: project does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        'default':
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+    delete:
+      summary: Delete a project
+      operationId: DeleteProject
+      parameters:
+        - name: projectName
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '404':
+          description: project does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        'default':
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+  /projects/{projectName}/users:
+    get:
+      summary: List users in a project
+      operationId: ListProjectUsers
+      parameters:
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: list of users in project
+          content:
+            application/json:
+              schema:
+                properties:
+                  users:
+                    type: array
+                    items:
+                      type: string
+    post:
+      summary: Add a user to a project
+      operationId: AddProjectUser
+      description: |
+        This operation will add a user to a project. It is an error to add a
+        user that already exists. If the user does not exist on the backend,
+        it is the responsbility of the backend implementation to create the
+        user.
+      parameters:
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: user was added to project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '409':
+          description: "conflict: user was already a member of project"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+  /projects/{projectName}/users/{userName}:
+    get:
+      summary: Verify membership of a user in a project
+      operationId: GetProjectUser
+      parameters:
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: user is in project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+    delete:
+      summary: Remove a user from a project
+      operationId: DeleteProjectUser
+      parameters:
+        - name: projectName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: deleted user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+
+  /users/{userName}:
+    get:
+      summary: Return a list of projects of which a user is a member
+      operationId: getUser
+      parameters:
+        - name: userName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: list of projects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectList'
+    delete:
+      summary: Remove a user from all projects
+      operationId: deleteUser
+      parameters:
+        - name: userName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: user was deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+
+  /quotas:
+    get:
+      summary: Return a list of available quotas
+      operationId: ListQuotas
+      responses:
+        '200':
+          description: user was deleted
+          content:
+            application/json:
+              schema:
+                properties:
+                  quotas:
+                    type: array
+                    items:
+                      type: string
+  /quotas/{quotaName}:
+    get:
+      summary: Verify that a uota exists
+      operationId: getQuota
+      parameters:
+        - name: quotaName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: quota exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+components:
+  schemas:
+    ProjectList:
+      type: array
+      items:
+        $ref: '#/components/schemas/Project'
+
+    Project:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        requester:
+          type: string
+        quota:
+          type: string
+          oneOf:
+            - x-small
+            - small
+            - medium
+            - large
+            - x-large
+        users:
+          type: array
+          items:
+            type: string
+      required:
+        - name
+        - description
+        - requester
+        - quota
+
+    ProjectUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        requester:
+          type: string
+        quota:
+          type: string
+
+    Status:
+      type: object
+      properties:
+        status:
+          enum: ["ok", "error"]
+        message:
+          type: string
+      required:
+        - status
+        - message
