@@ -18,7 +18,11 @@ OPENAPI_GENERATOR_GENERATE \
 
 DESTDIR ?= .
 
-all: $(DESTDIR)/html/index.html $(DESTDIR)/python/README.md $(DESTDIR)/go/README.md
+html: $(DESTDIR)/html/index.html
+
+skel: $(DESTDIR)/python/README.md $(DESTDIR)/go/README.md
+
+all: html skel
 
 publish: all
 	ghp-import out
@@ -37,4 +41,4 @@ $(DESTDIR)/go/README.md: openapi.yaml
 	$(OPENAPI_GENERATOR_GENERATE) -o $(DESTDIR)/go -g go-echo-server
 
 clean:
-	rm -rf $(DESTDIR)/index.html
+	rm -rf $(DESTDIR)/html/index.html
